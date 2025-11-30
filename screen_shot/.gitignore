@@ -1,0 +1,15 @@
+# 开发工具生成的文件
+icons/create_icons.py
+icons/create-icons.js
+icons/generate-icons.html
+icons/icon.svg
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

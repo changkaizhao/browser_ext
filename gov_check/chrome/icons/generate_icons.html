@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生成图标</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>政府网站检测器图标生成器</h1>
+  <p>点击下面的按钮下载不同尺寸的图标</p>
+
+  <div>
+    <canvas id="canvas16" width="16" height="16"></canvas>
+    <canvas id="canvas48" width="48" height="48"></canvas>
+    <canvas id="canvas128" width="128" height="128"></canvas>
+  </div>
+
+  <div>
+    <button onclick="downloadIcon(16)">下载 16x16</button>
+    <button onclick="downloadIcon(48)">下载 48x48</button>
+    <button onclick="downloadIcon(128)">下载 128x128</button>
+    <button onclick="downloadAll()">下载全部</button>
+  </div>
+
+  <script>
+    function drawIcon(canvas, size) {
+      const ctx = canvas.getContext('2d');
+
+      // 渐变背景
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+
+      // 绘制建筑物图标（政府大楼）
+      ctx.fillStyle = 'white';
+
+      // 屋顶
+      const roofY = size * 0.25;
+      const roofHeight = size * 0.15;
+      ctx.fillRect(size * 0.2, roofY, size * 0.6, roofHeight);
+
+      // 主体
+      const bodyY = roofY + roofHeight;
+      const bodyHeight = size * 0.5;
+      ctx.fillRect(size * 0.25, bodyY, size * 0.5, bodyHeight);
+
+      // 柱子
+      const columnWidth = size * 0.08;
+      const columnHeight = bodyHeight * 0.7;
+      const columnY = bodyY + bodyHeight * 0.15;
+
+      for (let i = 0; i < 3; i++) {
+        const x = size * 0.3 + i * size * 0.15;
+        ctx.fillRect(x, columnY, columnWidth, columnHeight);
+      }
+
+      // 底座
+      const baseY = bodyY + bodyHeight;
+      ctx.fillRect(size * 0.2, baseY, size * 0.6, size * 0.08);
+    }
+
+    // 绘制所有尺寸的图标
+    drawIcon(document.getElementById('canvas16'), 16);
+    drawIcon(document.getElementById('canvas48'), 48);
+    drawIcon(document.getElementById('canvas128'), 128);
+
+    function downloadIcon(size) {
+      const canvas = document.getElementById(`canvas${size}`);
+      const link = document.createElement('a');
+      link.download = `icon${size}.png`;
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+
+    function downloadAll() {
+      [16, 48, 128].forEach(size => {
+        setTimeout(() => downloadIcon(size), size * 10);
+      });
+    }
+  </script>
+</body>
+</html>
