@@ -300,11 +300,11 @@ async function captureSelectedArea(left, top, width, height) {
     // 逐块截图
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
-        // 计算当前块在选择区域中的位置
+        // 计算当前块在canvas中的位置
         const blockX = col * viewportWidth;
         const blockY = row * viewportHeight;
 
-        // 计算需要滚动到的页面位置
+        // 计算需要滚动到的页面位置(选择区域的绝对位置 + 块偏移)
         const scrollToX = left + blockX;
         const scrollToY = top + blockY;
 
@@ -322,10 +322,15 @@ async function captureSelectedArea(left, top, width, height) {
         const blockWidth = Math.min(viewportWidth, width - blockX);
         const blockHeight = Math.min(viewportHeight, height - blockY);
 
-        // 绘制到canvas
+        // 计算从截图中裁剪的起始位置
+        // 当滚动后,选择区域的左上角在视口中的位置
+        const cropX = Math.max(0, left - window.scrollX) * dpr;
+        const cropY = Math.max(0, top - window.scrollY) * dpr;
+
+        // 绘制到canvas,裁剪掉不需要的部分
         ctx.drawImage(
           img,
-          0, 0, blockWidth * dpr, blockHeight * dpr,
+          cropX, cropY, blockWidth * dpr, blockHeight * dpr,
           blockX, blockY, blockWidth, blockHeight
         );
       }
