@@ -233,98 +233,115 @@ async function captureSelectedArea(left, top, width, height) {
   const originalScrollX = window.scrollX;
   const originalScrollY = window.scrollY;
 
-  // 计算选择区域的边界
-  const selectionRight = left + width;
-  const selectionBottom = top + height;
+  // 隐藏覆盖层和提示
+  const overlay = document.getElementById('screenshot-overlay');
+  const hint = document.getElementById('screenshot-hint');
+  if (overlay) overlay.style.display = 'none';
+  if (hint) hint.style.display = 'none';
 
-  // 检查是否需要多视口拼接
-  const needsStitching =
-    width > viewportWidth ||
-    height > viewportHeight ||
-    (left - originalScrollX < 0) ||
-    (top - originalScrollY < 0) ||
-    (selectionRight - originalScrollX > viewportWidth) ||
-    (selectionBottom - originalScrollY > viewportHeight);
+  // 隐藏滚动条 (使用CSS以保持可滚动性)
+  hideScrollbars();
 
-  if (!needsStitching) {
-    // 简单情况:选区完全在当前视口内
-    const dataUrl = await captureVisibleTab();
-    const img = await loadImage(dataUrl);
+  try {
+    // 计算选择区域的边界
+    const selectionRight = left + width;
+    const selectionBottom = top + height;
 
+    // 检查是否需要多视口拼接
+    const needsStitching =
+      width > viewportWidth ||
+      height > viewportHeight ||
+      (left - originalScrollX < 0) ||
+      (top - originalScrollY < 0) ||
+      (selectionRight - originalScrollX > viewportWidth) ||
+      (selectionBottom - originalScrollY > viewportHeight);
+
+    if (!needsStitching) {
+      // 简单情况:选区完全在当前视口内
+      // 等待一小段时间确保UI更新
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const dataUrl = await captureVisibleTab();
+      const img = await loadImage(dataUrl);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const sourceX = (left - originalScrollX) * dpr;
+      const sourceY = (top - originalScrollY) * dpr;
+
+      ctx.drawImage(
+        img,
+        sourceX, sourceY, width * dpr, height * dpr,
+        0, 0, width, height
+      );
+
+      const screenshotDataUrl = canvas.toDataURL('image/png');
+      downloadAreaScreenshot(screenshotDataUrl);
+      return;
+    }
+
+    // 复杂情况:需要拼接多个视口
     const canvas = document.createElement('canvas');
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    const sourceX = (left - originalScrollX) * dpr;
-    const sourceY = (top - originalScrollY) * dpr;
+    // 计算需要截取的行数和列数
+    const rows = Math.ceil(height / viewportHeight);
+    const cols = Math.ceil(width / viewportWidth);
 
-    ctx.drawImage(
-      img,
-      sourceX, sourceY, width * dpr, height * dpr,
-      0, 0, width, height
-    );
+    console.log(`Stitching ${rows}x${cols} screenshots for selection...`);
 
+    // 逐块截图
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        // 计算当前块在选择区域中的位置
+        const blockX = col * viewportWidth;
+        const blockY = row * viewportHeight;
+
+        // 计算需要滚动到的页面位置
+        const scrollToX = left + blockX;
+        const scrollToY = top + blockY;
+
+        // 滚动到目标位置
+        window.scrollTo(scrollToX, scrollToY);
+
+        // 等待渲染
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        // 截取当前视口
+        const dataUrl = await captureVisibleTab();
+        const img = await loadImage(dataUrl);
+
+        // 计算当前块的实际大小
+        const blockWidth = Math.min(viewportWidth, width - blockX);
+        const blockHeight = Math.min(viewportHeight, height - blockY);
+
+        // 绘制到canvas
+        ctx.drawImage(
+          img,
+          0, 0, blockWidth * dpr, blockHeight * dpr,
+          blockX, blockY, blockWidth, blockHeight
+        );
+      }
+    }
+
+    // 转换为blob并下载
     const screenshotDataUrl = canvas.toDataURL('image/png');
     downloadAreaScreenshot(screenshotDataUrl);
 
-    return;
+  } finally {
+    // 恢复状态
+    showScrollbars();
+    window.scrollTo(originalScrollX, originalScrollY);
+    if (overlay) overlay.style.display = '';
+    if (hint) hint.style.display = '';
   }
-
-  // 复杂情况:需要拼接多个视口
-  const canvas = document.createElement('canvas');
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  // 计算需要截取的行数和列数
-  const rows = Math.ceil(height / viewportHeight);
-  const cols = Math.ceil(width / viewportWidth);
-
-  console.log(`Stitching ${rows}x${cols} screenshots for selection...`);
-
-  // 逐块截图
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      // 计算当前块在选择区域中的位置
-      const blockX = col * viewportWidth;
-      const blockY = row * viewportHeight;
-
-      // 计算需要滚动到的页面位置
-      const scrollToX = left + blockX;
-      const scrollToY = top + blockY;
-
-      // 滚动到目标位置
-      window.scrollTo(scrollToX, scrollToY);
-
-      // 等待渲染
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // 截取当前视口
-      const dataUrl = await captureVisibleTab();
-      const img = await loadImage(dataUrl);
-
-      // 计算当前块的实际大小
-      const blockWidth = Math.min(viewportWidth, width - blockX);
-      const blockHeight = Math.min(viewportHeight, height - blockY);
-
-      // 绘制到canvas
-      ctx.drawImage(
-        img,
-        0, 0, blockWidth * dpr, blockHeight * dpr,
-        blockX, blockY, blockWidth, blockHeight
-      );
-    }
-  }
-
-  // 恢复原始滚动位置
-  window.scrollTo(originalScrollX, originalScrollY);
-
-  // 转换为blob并下载
-  const screenshotDataUrl = canvas.toDataURL('image/png');
-  downloadAreaScreenshot(screenshotDataUrl);
 }
 
 // 辅助函数:下载区域截图
@@ -348,87 +365,118 @@ async function captureFullPageScreenshot() {
   const originalScrollX = window.scrollX;
   const originalScrollY = window.scrollY;
 
-  // 获取页面完整尺寸
-  const body = document.body;
-  const html = document.documentElement;
+  try {
+    // 隐藏滚动条
+    hideScrollbars();
 
-  const fullWidth = Math.max(
-    body.scrollWidth,
-    body.offsetWidth,
-    html.clientWidth,
-    html.scrollWidth,
-    html.offsetWidth
-  );
+    // 获取页面完整尺寸
+    const body = document.body;
+    const html = document.documentElement;
 
-  const fullHeight = Math.max(
-    body.scrollHeight,
-    body.offsetHeight,
-    html.clientHeight,
-    html.scrollHeight,
-    html.offsetHeight
-  );
+    const fullWidth = Math.max(
+      body.scrollWidth,
+      body.offsetWidth,
+      html.clientWidth,
+      html.scrollWidth,
+      html.offsetWidth
+    );
 
-  // 视口尺寸
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
+    const fullHeight = Math.max(
+      body.scrollHeight,
+      body.offsetHeight,
+      html.clientHeight,
+      html.scrollHeight,
+      html.offsetHeight
+    );
 
-  // 创建canvas (考虑DPI)
-  const canvas = document.createElement('canvas');
-  canvas.width = fullWidth * dpr;
-  canvas.height = fullHeight * dpr;
-  const ctx = canvas.getContext('2d');
+    // 视口尺寸
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
-  // 缩放上下文以匹配DPI
-  ctx.scale(dpr, dpr);
+    // 创建canvas (考虑DPI)
+    const canvas = document.createElement('canvas');
+    canvas.width = fullWidth * dpr;
+    canvas.height = fullHeight * dpr;
+    const ctx = canvas.getContext('2d');
 
-  // 计算需要截取的行数和列数
-  const rows = Math.ceil(fullHeight / viewportHeight);
-  const cols = Math.ceil(fullWidth / viewportWidth);
+    // 缩放上下文以匹配DPI
+    ctx.scale(dpr, dpr);
 
-  console.log(`Capturing ${rows}x${cols} screenshots...`);
+    // 计算需要截取的行数和列数
+    const rows = Math.ceil(fullHeight / viewportHeight);
+    const cols = Math.ceil(fullWidth / viewportWidth);
 
-  // 逐块截图
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x = col * viewportWidth;
-      const y = row * viewportHeight;
+    console.log(`Capturing ${rows}x${cols} screenshots...`);
 
-      // 滚动到目标位置
-      window.scrollTo(x, y);
+    // 逐块截图
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = col * viewportWidth;
+        const y = row * viewportHeight;
 
-      // 等待渲染
-      await new Promise(resolve => setTimeout(resolve, 100));
+        // 滚动到目标位置
+        window.scrollTo(x, y);
 
-      // 截取当前视口
-      const dataUrl = await captureVisibleTab();
-      const img = await loadImage(dataUrl);
+        // 等待渲染
+        await new Promise(resolve => setTimeout(resolve, 150));
 
-      // 计算实际需要绘制的区域
-      const drawWidth = Math.min(viewportWidth, fullWidth - x);
-      const drawHeight = Math.min(viewportHeight, fullHeight - y);
+        // 截取当前视口
+        const dataUrl = await captureVisibleTab();
+        const img = await loadImage(dataUrl);
 
-      // 绘制到canvas (源图像考虑DPI)
-      ctx.drawImage(img, 0, 0, drawWidth * dpr, drawHeight * dpr, x, y, drawWidth, drawHeight);
+        // 计算实际需要绘制的区域
+        const drawWidth = Math.min(viewportWidth, fullWidth - x);
+        const drawHeight = Math.min(viewportHeight, fullHeight - y);
+
+        // 绘制到canvas (源图像考虑DPI)
+        ctx.drawImage(img, 0, 0, drawWidth * dpr, drawHeight * dpr, x, y, drawWidth, drawHeight);
+      }
     }
+
+    // 转换为blob并下载
+    const fullDataUrl = canvas.toDataURL('image/png');
+
+    // 生成文件名: 主域名 + 时间戳
+    const hostname = window.location.hostname;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `${hostname}_${timestamp}.png`;
+
+    // 发送到background script进行下载
+    chrome.runtime.sendMessage({
+      action: 'downloadScreenshot',
+      dataUrl: fullDataUrl,
+      filename: filename
+    });
+
+  } finally {
+    // 恢复原始状态
+    showScrollbars();
+    window.scrollTo(originalScrollX, originalScrollY);
   }
+}
 
-  // 恢复原始滚动位置
-  window.scrollTo(originalScrollX, originalScrollY);
+// 隐藏滚动条
+function hideScrollbars() {
+  const style = document.createElement('style');
+  style.id = 'screenshot-hide-scrollbars';
+  style.textContent = `
+    ::-webkit-scrollbar {
+      display: none !important;
+    }
+    body {
+      -ms-overflow-style: none !important;
+      scrollbar-width: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
-  // 转换为blob并下载
-  const fullDataUrl = canvas.toDataURL('image/png');
-
-  // 生成文件名: 主域名 + 时间戳
-  const hostname = window.location.hostname;
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-  const filename = `${hostname}_${timestamp}.png`;
-
-  // 发送到background script进行下载
-  chrome.runtime.sendMessage({
-    action: 'downloadScreenshot',
-    dataUrl: fullDataUrl,
-    filename: filename
-  });
+// 恢复滚动条
+function showScrollbars() {
+  const style = document.getElementById('screenshot-hide-scrollbars');
+  if (style) {
+    style.remove();
+  }
 }
 
 // 截取当前可见标签页
